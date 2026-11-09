@@ -3147,7 +3147,7 @@ endif
 ifneq "$(HOSTARCH)" "x86_64"
 /workspaces/labsisop-buildroot/output/build/buildroot-config/auto.conf: FORCE
 endif
-ifneq "$(BR2_VERSION_FULL)" "-gab3ec8528-dirty"
+ifneq "$(BR2_VERSION_FULL)" "-g53f9a21ab-dirty"
 /workspaces/labsisop-buildroot/output/build/buildroot-config/auto.conf: FORCE
 endif
 

@@ -26,23 +26,20 @@ cd /root
 
 5. Gravar traces no QEMU
 
-trace-cmd record -o trace_other.dat -e sched:sched_switch sh -c "./sched_profiler 5000000 4 SCHED_OTHER > saida_other.txt"
+trace-cmd record -o trace_other.dat -e sched:sched_switch sh -c "./sched_profiler 50000000 4 SCHED_OTHER > saida_other.txt"
 awk '/Apos pos/{f=1} f' saida_other.txt
 
-trace-cmd record -o trace_fifo.dat -e sched:sched_switch sh -c "./sched_profiler 5000000 4 SCHED_FIFO > saida_fifo.txt"
+trace-cmd record -o trace_fifo.dat -e sched:sched_switch sh -c "./sched_profiler 50000000 4 SCHED_FIFO > saida_fifo.txt"
 awk '/Apos pos/{f=1} f' saida_fifo.txt
 
-trace-cmd record -o trace_rr.dat -e sched:sched_switch sh -c "./sched_profiler 5000000 4 SCHED_RR > saida_rr.txt"
+trace-cmd record -o trace_rr.dat -e sched:sched_switch sh -c "./sched_profiler 50000000 4 SCHED_RR > saida_rr.txt"
 awk '/Apos pos/{f=1} f' saida_rr.txt
 
-trace-cmd record -o trace_idle.dat -e sched:sched_switch sh -c "./sched_profiler 5000000 4 SCHED_IDLE > saida_idle.txt"
+trace-cmd record -o trace_idle.dat -e sched:sched_switch sh -c "./sched_profiler 50000000 4 SCHED_IDLE > saida_idle.txt"
 awk '/Apos pos/{f=1} f' saida_idle.txt
 
-trace-cmd record -o trace_low_idle.dat -e sched:sched_switch sh -c "./sched_profiler 5000000 4 SCHED_LOW_IDLE > saida_low_idle.txt"
+trace-cmd record -o trace_low_idle.dat -e sched:sched_switch sh -c "./sched_profiler 50000000 4 SCHED_LOW_IDLE,SCHED_IDLE,SCHED_LOW_IDLE,SCHED_IDLE > saida_low_idle.txt"
 awk '/Apos pos/{f=1} f' saida_low_idle.txt
-
-trace-cmd record -o trace_misto.dat -e sched:sched_switch sh -c "./sched_profiler 5000000 2 SCHED_LOW_IDLE,SCHED_IDLE > saida_misto.txt"
-awk '/Apos pos/{f=1} f' saida_misto.txt
 
 sync
 poweroff
@@ -50,7 +47,7 @@ poweroff
 6. Copiar traces para o Codespace
 
 cd /workspaces/labsisop-buildroot
-for p in other fifo rr idle low_idle misto; do
+for p in other fifo rr idle low_idle; do
   e2cp output/images/rootfs.ext2:/root/trace_$p.dat trace_$p.dat
   e2cp output/images/rootfs.ext2:/root/saida_$p.txt saida_$p.txt
 done
