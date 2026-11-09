@@ -1,4 +1,3 @@
-
 #define _GNU_SOURCE
 
 #include <stdio.h>
@@ -10,66 +9,30 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <sched.h>
-#include <sys/types.h>
-#include <sys/syscall.h>
-#include <linux/types.h>
 
 #ifndef SCHED_IDLE
 #define SCHED_IDLE 5
 #endif
 
-#define SCHED_DEADLINE 6
+/* Politica criada no Tutorial 3.0 (nao existe nos headers da toolchain) */
 #define SCHED_LOW_IDLE 7
 
-#ifdef __x86_64__
-#define __NR_sched_setattr 314
-#define __NR_sched_getattr 315
-#elif defined(__i386__)
-#define __NR_sched_setattr 351
-#define __NR_sched_getattr 352
-#elif defined(__aarch64__)
-#define __NR_sched_setattr 274
-#define __NR_sched_getattr 275
-#elif defined(__arm__)
-#define __NR_sched_setattr 380
-#define __NR_sched_getattr 381
-#else
-#error "Arquitetura nao suportada para sched_setattr"
-#endif
-
-#define MAX_THREADS 26
-#define RT_PRIORITY 1
-#define LINE_WIDTH 64
-#define RAW_PRINT_MAX 20000
-#define FIFO_YIELD_INTERVAL 1000
-#define WRITE_CHUNK_SIZE 256
-
-#define DEADLINE_RUNTIME (10ULL * 1000 * 1000)
-#define DEADLINE_PERIOD  (30ULL * 1000 * 1000)
+#define MAX_THREADS    26
+#define RT_PRIORITY    10
+#define LINE_WIDTH     64
+#define RAW_PRINT_MAX  20000
 
 static char *buffer;
 static size_t buffer_size;
-static size_t next_index;
-static sem_t ready;
-
-struct sched_attr {
-    __u32 size;
-    __u32 sched_policy;
-    __u64 sched_flags;
-    __s32 sched_nice;
-    __u32 sched_priority;
-    __u64 sched_runtime;
-    __u64 sched_deadline;
-    __u64 sched_period;
-};
+static size_t next_index;     /* ponteiro global: proxima posicao livre */
+static sem_t mutex;           /* semaforo binario da secao critica */
+static sem_t ready;           /* threads avisam que estao prontas */
 
 struct thread_arg {
-    int id;
     char ch;
     int policy;
     int err;
-    pid_t tid;
-    sem_t start;
+    sem_t start;              /* largada sincronizada */
     pthread_t thread;
 };
 
@@ -82,11 +45,10 @@ struct policy_name {
 
 static const struct policy_name policies[] = {
     { "SCHED_LOW_IDLE", SCHED_LOW_IDLE },
-    { "SCHED_IDLE", SCHED_IDLE },
-    { "SCHED_FIFO", SCHED_FIFO },
-    { "SCHED_RR", SCHED_RR },
-    { "SCHED_OTHER", SCHED_OTHER },
-    { "SCHED_DEADLINE", SCHED_DEADLINE }
+    { "SCHED_IDLE",     SCHED_IDLE },
+    { "SCHED_FIFO",     SCHED_FIFO },
+    { "SCHED_RR",       SCHED_RR },
+    { "SCHED_OTHER",    SCHED_OTHER }
 };
 
 #define NPOLICIES ((int)(sizeof(policies) / sizeof(policies[0])))
@@ -96,7 +58,7 @@ static int parse_policy(const char *s)
     int i;
 
     for (i = 0; i < NPOLICIES; i++) {
-        const char *short_name = policies[i].name + 6;
+        const char *short_name = policies[i].name + 6; /* sem "SCHED_" */
 
         if (strcasecmp(s, policies[i].name) == 0 ||
             strcasecmp(s, short_name) == 0)
@@ -120,56 +82,39 @@ static const char *policy_str(int policy)
 
 static int priority_for(int policy)
 {
-    return (policy == SCHED_FIFO || policy == SCHED_RR)
-           ? RT_PRIORITY : 0;
+    return (policy == SCHED_FIFO || policy == SCHED_RR) ? RT_PRIORITY : 0;
 }
 
 static void print_sched(int policy)
 {
-    int priority_min;
-    int priority_max;
-
-    printf("%s", policy_str(policy));
-
-    priority_min = sched_get_priority_min(policy);
-    priority_max = sched_get_priority_max(policy);
-
-    printf(" PRI_MIN: %d PRI_MAX: %d\n",
-           priority_min, priority_max);
+    printf("%s PRI_MIN: %d PRI_MAX: %d\n",
+           policy_str(policy),
+           sched_get_priority_min(policy),
+           sched_get_priority_max(policy));
 }
 
-static int set_thread_policy(pthread_t *thr,
-                             int newpolicy,
-                             int newpriority)
+static int set_thread_policy(pthread_t *thr, int newpolicy, int newpriority)
 {
     int policy;
     int ret;
-    int priority_min;
-    int priority_max;
-
+    int priority_min = sched_get_priority_min(newpolicy);
+    int priority_max = sched_get_priority_max(newpolicy);
     struct sched_param param;
 
-    priority_min = sched_get_priority_min(newpolicy);
-    priority_max = sched_get_priority_max(newpolicy);
-
     if (priority_min == -1 || priority_max == -1) {
-        fprintf(stderr, "Politica invalida: %s\n",
-                policy_str(newpolicy));
+        fprintf(stderr, "Politica invalida: %s\n", policy_str(newpolicy));
         return errno ? errno : EINVAL;
     }
 
     if (newpriority > priority_max || newpriority < priority_min) {
-        fprintf(stderr,
-                "Invalid priority: MIN: %d, MAX: %d\n",
+        fprintf(stderr, "Invalid priority: MIN: %d, MAX: %d\n",
                 priority_min, priority_max);
         return EINVAL;
     }
 
     ret = pthread_getschedparam(*thr, &policy, &param);
-
     if (ret != 0) {
-        fprintf(stderr, "pthread_getschedparam: %s\n",
-                strerror(ret));
+        fprintf(stderr, "pthread_getschedparam: %s\n", strerror(ret));
         return ret;
     }
 
@@ -179,7 +124,6 @@ static int set_thread_policy(pthread_t *thr,
     param.sched_priority = newpriority;
 
     ret = pthread_setschedparam(*thr, newpolicy, &param);
-
     if (ret != 0) {
         fprintf(stderr, "pthread_setschedparam(%s): %s\n",
                 policy_str(newpolicy), strerror(ret));
@@ -187,10 +131,8 @@ static int set_thread_policy(pthread_t *thr,
     }
 
     ret = pthread_getschedparam(*thr, &policy, &param);
-
     if (ret != 0) {
-        fprintf(stderr, "pthread_getschedparam: %s\n",
-                strerror(ret));
+        fprintf(stderr, "pthread_getschedparam: %s\n", strerror(ret));
         return ret;
     }
 
@@ -205,113 +147,28 @@ static int set_thread_policy(pthread_t *thr,
     return 0;
 }
 
-static int sched_setattr(pid_t pid,
-                         const struct sched_attr *attr,
-                         unsigned int flags)
-{
-    return syscall(__NR_sched_setattr, pid, attr, flags);
-}
-
-static int sched_getattr(pid_t pid,
-                         struct sched_attr *attr,
-                         unsigned int size,
-                         unsigned int flags)
-{
-    return syscall(__NR_sched_getattr, pid, attr, size, flags);
-}
-
-static int set_deadline(pid_t tid)
-{
-    struct sched_attr attr;
-    struct sched_attr current;
-    unsigned int flags = 0;
-
-    int ret;
-
-    ret = sched_getattr(tid, &current, sizeof(current), 0);
-
-    if (ret < 0) {
-        fprintf(stderr, "sched_getattr: %s\n", strerror(errno));
-        return errno;
-    }
-
-    printf("current: %s\n", policy_str(current.sched_policy));
-
-    memset(&attr, 0, sizeof(attr));
-
-    attr.size = sizeof(attr);
-    attr.sched_flags = 0;
-    attr.sched_nice = 0;
-    attr.sched_priority = 0;
-
-    attr.sched_policy = SCHED_DEADLINE;
-    attr.sched_runtime = DEADLINE_RUNTIME;
-    attr.sched_deadline = DEADLINE_PERIOD;
-    attr.sched_period = DEADLINE_PERIOD;
-
-    ret = sched_setattr(tid, &attr, flags);
-
-    if (ret < 0) {
-        fprintf(stderr, "sched_setattr: %s\n", strerror(errno));
-        return errno;
-    }
-
-    ret = sched_getattr(tid, &current, sizeof(current), 0);
-
-    if (ret < 0) {
-        fprintf(stderr, "sched_getattr: %s\n", strerror(errno));
-        return errno;
-    }
-
-    printf("new: %s\n", policy_str(current.sched_policy));
-    printf("runtime: %llu ns\n",
-           (unsigned long long)current.sched_runtime);
-    printf("deadline: %llu ns\n",
-           (unsigned long long)current.sched_deadline);
-    printf("period: %llu ns\n",
-           (unsigned long long)current.sched_period);
-
-    if (current.sched_policy != SCHED_DEADLINE)
-        return EINVAL;
-
-    return 0;
-}
-
 static void *worker(void *arg)
 {
     struct thread_arg *t = arg;
-    unsigned int writes_since_yield = 0;
 
-    t->tid = (pid_t)syscall(SYS_gettid);
-
-    sem_post(&ready);
-
-    sem_wait(&t->start);
+    sem_post(&ready);      /* "estou pronta" */
+    sem_wait(&t->start);   /* espera a largada */
 
     if (t->err != 0)
         return NULL;
 
     for (;;) {
-        size_t start = __sync_fetch_and_add(&next_index,
-                                            WRITE_CHUNK_SIZE);
-        size_t end;
+        sem_wait(&mutex);              /* entra na secao critica */
 
-        if (start >= buffer_size)
+        if (next_index >= buffer_size) {
+            sem_post(&mutex);
             break;
-
-        end = start + WRITE_CHUNK_SIZE;
-        if (end > buffer_size)
-            end = buffer_size;
-
-        memset(buffer + start, t->ch, end - start);
-
-        if (t->policy == SCHED_FIFO) {
-            writes_since_yield += end - start;
-            if (writes_since_yield >= FIFO_YIELD_INTERVAL) {
-                writes_since_yield -= FIFO_YIELD_INTERVAL;
-                sched_yield();
-            }
         }
+
+        buffer[next_index] = t->ch;    /* escreve na posicao corrente */
+        next_index++;                  /* incrementa o ponteiro global */
+
+        sem_post(&mutex);              /* sai da secao critica */
     }
 
     return NULL;
@@ -337,10 +194,10 @@ static void usage(const char *prog)
     fprintf(stderr,
         "Uso: %s <tam_buffer> <num_threads> <politica>\n"
         "  politica: SCHED_LOW_IDLE | SCHED_IDLE | SCHED_FIFO\n"
-        "            SCHED_RR | SCHED_OTHER | SCHED_DEADLINE\n"
-        "  Tambem aceita lista separada por virgula.\n"
-        "Exemplo: %s 10000 4 SCHED_RR\n"
-        "Exemplo: %s 10000 3 SCHED_RR,SCHED_FIFO,SCHED_DEADLINE\n",
+        "            SCHED_RR | SCHED_OTHER\n"
+        "  Tambem aceita lista separada por virgula (uma por thread).\n"
+        "Exemplo: %s 5000000 4 SCHED_RR\n"
+        "Exemplo: %s 5000000 2 SCHED_LOW_IDLE,SCHED_IDLE\n",
         prog, prog, prog);
 }
 
@@ -348,26 +205,22 @@ int main(int argc, char **argv)
 {
     long size;
     long nthreads;
+    long i;
+    int rc;
+    int failed = 0;
 
     int list[MAX_THREADS];
     int nlist = 0;
 
-    int i;
-    int rc;
-    int failed = 0;
     struct sched_param main_param;
 
     char *plist;
     char *tok;
     char *save = NULL;
 
-    char *summary;
-
-    size_t slen = 0;
-
     long counts[MAX_THREADS];
     long blocks[MAX_THREADS];
-
+    long col = 0;
     char last;
 
     if (argc != 4) {
@@ -379,14 +232,12 @@ int main(int argc, char **argv)
     nthreads = atol(argv[2]);
 
     if (size <= 0 || nthreads <= 0 || nthreads > MAX_THREADS) {
-        fprintf(stderr,
-                "Erro: tam_buffer > 0 e 1 <= num_threads <= %d\n",
+        fprintf(stderr, "Erro: tam_buffer > 0 e 1 <= num_threads <= %d\n",
                 MAX_THREADS);
         return 1;
     }
 
     plist = strdup(argv[3]);
-
     if (!plist) {
         perror("strdup");
         return 1;
@@ -416,7 +267,6 @@ int main(int argc, char **argv)
     }
 
     buffer = calloc((size_t)size, 1);
-
     if (!buffer) {
         perror("calloc");
         return 1;
@@ -425,21 +275,17 @@ int main(int argc, char **argv)
     buffer_size = (size_t)size;
     next_index = 0;
     sem_init(&ready, 0, 0);
+    sem_init(&mutex, 0, 1);            /* semaforo binario */
 
+    /* cria as threads; todas ficam bloqueadas em t->start */
     for (i = 0; i < nthreads; i++) {
-        targs[i].id = i;
-        targs[i].ch = 'A' + i;
+        targs[i].ch = 'A' + (char)i;
         targs[i].policy = list[i % nlist];
         targs[i].err = 0;
-        targs[i].tid = 0;
 
         sem_init(&targs[i].start, 0, 0);
 
-        rc = pthread_create(&targs[i].thread,
-                            NULL,
-                            worker,
-                            &targs[i]);
-
+        rc = pthread_create(&targs[i].thread, NULL, worker, &targs[i]);
         if (rc != 0) {
             fprintf(stderr, "pthread_create: %s\n", strerror(rc));
             return 1;
@@ -449,6 +295,7 @@ int main(int argc, char **argv)
     for (i = 0; i < nthreads; i++)
         sem_wait(&ready);
 
+    /* main sobe para FIFO 99 para configurar todas antes da largada */
     main_param.sched_priority = sched_get_priority_max(SCHED_FIFO);
     rc = pthread_setschedparam(pthread_self(), SCHED_FIFO, &main_param);
     if (rc != 0)
@@ -456,30 +303,25 @@ int main(int argc, char **argv)
                 strerror(rc));
 
     for (i = 0; i < nthreads; i++) {
-
         printf("\n--- Thread %c ---\n", targs[i].ch);
 
-        if (targs[i].policy == SCHED_DEADLINE) {
-            rc = set_deadline(targs[i].tid);
-        } else {
-            rc = set_thread_policy(&targs[i].thread,
-                                   targs[i].policy,
-                                   priority_for(targs[i].policy));
-        }
+        rc = set_thread_policy(&targs[i].thread,
+                               targs[i].policy,
+                               priority_for(targs[i].policy));
 
         if (rc != 0) {
             targs[i].err = rc;
             failed++;
 
-            if (rc == EPERM) {
+            if (rc == EPERM)
                 fprintf(stderr,
                         "Thread %c: permissao insuficiente. "
                         "Pode ser necessario executar como root.\n",
                         targs[i].ch);
-            }
         }
     }
 
+    /* largada */
     for (i = 0; i < nthreads; i++)
         sem_post(&targs[i].start);
 
@@ -503,23 +345,15 @@ int main(int argc, char **argv)
         print_wrapped(buffer, (size_t)size);
     } else {
         print_wrapped(buffer, RAW_PRINT_MAX);
-
         printf("[... mostrando as primeiras %d de %ld posicoes ...]\n",
                RAW_PRINT_MAX, size);
     }
 
-    summary = malloc((size_t)size + 1);
-
-    if (!summary) {
-        perror("malloc");
-        free(buffer);
-        return 1;
-    }
-
     memset(counts, 0, sizeof(counts));
     memset(blocks, 0, sizeof(blocks));
-
     last = 0;
+
+    printf("\n--- Apos pos-processamento ---\n");
 
     for (i = 0; i < size; i++) {
         char c = buffer[i];
@@ -530,26 +364,23 @@ int main(int argc, char **argv)
         counts[c - 'A']++;
 
         if (c != last) {
-            summary[slen++] = c;
+            putchar(c);
+            if (++col % LINE_WIDTH == 0)
+                putchar('\n');
             blocks[c - 'A']++;
             last = c;
         }
     }
 
-    summary[slen] = '\0';
-
-    printf("\n--- Apos pos-processamento ---\n");
-
-    print_wrapped(summary, slen);
+    if (col % LINE_WIDTH != 0)
+        putchar('\n');
 
     printf("\n--- Blocos consecutivos e caracteres escritos ---\n");
 
-    for (i = 0; i < nthreads; i++) {
+    for (i = 0; i < nthreads; i++)
         printf("%c = %ld blocos, %ld caracteres\n",
                targs[i].ch, blocks[i], counts[i]);
-    }
 
-    free(summary);
     free(buffer);
 
     return 0;
