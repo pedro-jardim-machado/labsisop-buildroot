@@ -336,8 +336,18 @@ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 --- Apos pos-processamento ---
 ABCDABCDABCDABCD
 
---- Blocos consecutivos e caracteres escritos ---
-A = 4 blocos, 1009833 caracteres
-B = 4 blocos, 1435370 caracteres
-C = 4 blocos, 1603311 caracteres
-D = 4 blocos, 951486 caracteres
+--- Escalonamentos (trocas de contexto + primeira entrada) ---
+A = 10 escalonamentos, 1206817 caracteres
+B = 9 escalonamentos, 1777829 caracteres
+C = 9 escalonamentos, 1234617 caracteres
+D = 8 escalonamentos, 780737 caracteres
+
+--- Distribuicao percentual de CPU ---
+Tempo total de CPU das threads: 1.909441802 segundos
+
+Thread A (SCHED_RR):  20.98% da CPU
+Thread B (SCHED_RR):  31.39% da CPU
+Thread C (SCHED_RR):  26.47% da CPU
+Thread D (SCHED_RR):  21.17% da CPU
+
+Soma das porcentagens: 100.00%

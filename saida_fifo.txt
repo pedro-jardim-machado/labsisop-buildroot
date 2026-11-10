@@ -336,8 +336,18 @@ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 --- Apos pos-processamento ---
 A
 
---- Blocos consecutivos e caracteres escritos ---
-A = 1 blocos, 5000000 caracteres
-B = 0 blocos, 0 caracteres
-C = 0 blocos, 0 caracteres
-D = 0 blocos, 0 caracteres
+--- Escalonamentos (trocas de contexto + primeira entrada) ---
+A = 2 escalonamentos, 5000000 caracteres
+B = 1 escalonamentos, 0 caracteres
+C = 1 escalonamentos, 0 caracteres
+D = 1 escalonamentos, 0 caracteres
+
+--- Distribuicao percentual de CPU ---
+Tempo total de CPU das threads: 1.000922550 segundos
+
+Thread A (SCHED_FIFO):  99.95% da CPU
+Thread B (SCHED_FIFO):   0.00% da CPU
+Thread C (SCHED_FIFO):   0.01% da CPU
+Thread D (SCHED_FIFO):   0.04% da CPU
+
+Soma das porcentagens: 100.00%
