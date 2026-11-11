@@ -32,7 +32,7 @@ No misto, a thread A é LOW_IDLE e a B é IDLE. Os caracteres escritos por cada 
 
 E. Prints do KernelShark (5, um por trace)
 curl -fsSL https://gist.githubusercontent.com/miguelxvr/3c123ef67611652af9d2e45eccb8fc0a/raw/ | bash -s -- start
-DISPLAY=:99 kernelshark /workspaces/labsisop-buildroot/trace_fifo.dat &
+DISPLAY=:99 kernelshark /workspaces/labsisop-DISPLAY=:99 kernelshark /workspaces/labsisop-buildroot/trace_rr.dat &buildroot/trace_fifo.dat &
 
 Tire o print e feche a janela antes de abrir o próximo. Repita trocando fifo por rr, idle, low_idle e misto. No RR, deixe o Marker A→B visível para medir a fatia.
 
