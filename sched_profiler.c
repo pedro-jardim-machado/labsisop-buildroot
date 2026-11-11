@@ -7,7 +7,6 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <sched.h>
-#include <sys/resource.h>
 #include <time.h>
 
 #define SCHED_IDLE 5
@@ -27,7 +26,6 @@ static sem_t ready;
 struct thread_arg {
     char ch;
     int policy;
-    double cpu;                    /* tempo de CPU*/
     sem_t start;                   /* largada sincronizada */
     pthread_t thread;
 };
@@ -92,23 +90,12 @@ static int set_thread_policy(pthread_t thr, int policy)
     return 0;
 }
 
-static void thread_rusage(struct rusage *ru)
-{
-    if (getrusage(RUSAGE_THREAD, ru) != 0) {
-        perror("getrusage");
-        exit(1);
-    }
-}
-
 static void *worker(void *arg)
 {
     struct thread_arg *t = arg;
-    struct rusage ini, fim;
 
     sem_post(&ready);
     sem_wait(&t->start);
-
-    thread_rusage(&ini);
 
     for (;;) {
         sem_wait(&mutex);              /* secao critica */
@@ -123,12 +110,6 @@ static void *worker(void *arg)
 
         sem_post(&mutex);              /* sai da secao critica */
     }
-
-    thread_rusage(&fim);
-    t->cpu = (fim.ru_utime.tv_sec - ini.ru_utime.tv_sec) +
-             (fim.ru_utime.tv_usec - ini.ru_utime.tv_usec) / 1e6 +
-             (fim.ru_stime.tv_sec - ini.ru_stime.tv_sec) +
-             (fim.ru_stime.tv_usec - ini.ru_stime.tv_usec) / 1e6;
 
     return NULL;
 }
@@ -174,7 +155,6 @@ int main(int argc, char **argv)
     long blocks[MAX_THREADS] = { 0 };
     long col = 0;
     char last = 0;
-    double total_cpu = 0.0;
 
     if (clock_gettime(CLOCK_MONOTONIC, &start_time) != 0) {
         perror("clock_gettime");
@@ -287,7 +267,7 @@ int main(int argc, char **argv)
                MAX_PRINT, size);
     }
 
-    printf("\n--- Sequencia compactada (repeticoes consecutivas agrupadas) ---\n");
+    printf("\n--- Sequencia compactada ---\n");
 
     for (i = 0; i < size; i++) {
         char c = buffer[i];
@@ -306,14 +286,10 @@ int main(int argc, char **argv)
     if (col % LINE_WIDTH != 0)
         putchar('\n');
 
+    printf("\n--- Resumo por thread ---\n");
     for (i = 0; i < nthreads; i++)
-        total_cpu += targs[i].cpu;
-
-    printf("\n--- Resumo por thread: blocos, caracteres e CPU ---\n");
-    for (i = 0; i < nthreads; i++)
-        printf("%c = %ld blocos, %ld caracteres   (%6.2f%% da CPU)\n",
-               targs[i].ch, blocks[i], counts[i],
-               total_cpu > 0.0 ? 100.0 * targs[i].cpu / total_cpu : 0.0);
+        printf("%c = %ld, %ld caracteres\n",
+               targs[i].ch, blocks[i], counts[i]);
 
     if (clock_gettime(CLOCK_MONOTONIC, &end_time) != 0) {
         perror("clock_gettime");

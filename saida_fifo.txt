@@ -173,12 +173,12 @@ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 AAAAAAAAAAAAAAAA
 [... mostrando as primeiras 10000 de 5000000 posicoes ...]
 
---- Sequencia compactada (repeticoes consecutivas agrupadas) ---
+--- Sequencia compactada ---
 A
 
---- Resumo por thread: blocos, caracteres e CPU ---
-A = 1 blocos, 5000000 caracteres   (100.00% da CPU)
-B = 0 blocos, 0 caracteres   (  0.00% da CPU)
-C = 0 blocos, 0 caracteres   (  0.00% da CPU)
-D = 0 blocos, 0 caracteres   (  0.00% da CPU)
-Tempo total do processo: 1.023 segundos
+--- Resumo por thread ---
+A = 1, 5000000 caracteres
+B = 0, 0 caracteres
+C = 0, 0 caracteres
+D = 0, 0 caracteres
+Tempo total do processo: 1.138 segundos
