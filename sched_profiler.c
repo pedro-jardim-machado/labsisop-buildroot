@@ -44,7 +44,7 @@ static const struct {
     { "SCHED_RR",       SCHED_RR }
 };
 
-#define NPOLICIES ((int)(sizeof(policies) / sizeof(policies[0])))
+#define NPOLICIES ((int)(sizeof(policies) / sizeof(policies[0]))) // length
 
 static int parse_policy(const char *s)
 {
@@ -105,8 +105,8 @@ static void *worker(void *arg)
     struct thread_arg *t = arg;
     struct rusage ini, fim;
 
-    sem_post(&ready);      
-    sem_wait(&t->start);  
+    sem_post(&ready);
+    sem_wait(&t->start);
 
     thread_rusage(&ini);
 
@@ -119,7 +119,7 @@ static void *worker(void *arg)
         }
 
         buffer[next_index] = t->ch;    /* escreve na posicao corrente */
-        next_index++;                  /* incrementa o ponteiro global */
+        next_index++;                  
 
         sem_post(&mutex);              /* sai da secao critica */
     }

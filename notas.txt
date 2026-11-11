@@ -1,67 +1,48 @@
-B. Compilar e copiar (QEMU desligado)
+1. 
 cd /workspaces/labsisop-buildroot
-CC=$(ls output/host/bin/*buildroot*-gcc | head -n1)
-$CC -O2 -pthread sched_profiler.c -o sched_profiler
+
+output/host/bin/i686-buildroot-linux-gnu-gcc -O2 -pthread sched_profiler.c -o sched_profiler
+
 e2cp -p sched_profiler output/images/rootfs.ext2:/root/sched_profiler
-C. Traces com 1 CPU
+
+
+2. Executar e gravar os traces
 ./output/images/start-qemu.sh serial-only
 
-Dentro do QEMU, primeiro calibre o tam_buffer. Procure uns 1,5 a 3 s no RR, e se ficar fora, ajuste e use o mesmo valor em todos os comandos abaixo:
 
+Dentro do QEMU:
 cd /root
-time ./sched_profiler 5000000 4 SCHED_RR > /dev/null
-
-Depois grave os 5 traces, trocando 5000000 se calibrou outro valor:
 
 trace-cmd record -o trace_fifo.dat -e sched:sched_switch sh -c "./sched_profiler 5000000 4 SCHED_FIFO > saida_fifo.txt"
+
 trace-cmd record -o trace_rr.dat -e sched:sched_switch sh -c "./sched_profiler 5000000 4 SCHED_RR > saida_rr.txt"
+
 trace-cmd record -o trace_idle.dat -e sched:sched_switch sh -c "./sched_profiler 5000000 4 SCHED_IDLE > saida_idle.txt"
+
 trace-cmd record -o trace_low_idle.dat -e sched:sched_switch sh -c "./sched_profiler 5000000 4 SCHED_LOW_IDLE > saida_low_idle.txt"
+
 trace-cmd record -o trace_misto.dat -e sched:sched_switch sh -c "./sched_profiler 5000000 2 SCHED_LOW_IDLE,SCHED_IDLE > saida_misto.txt"
+
 sync
 poweroff
-D. Copiar e ler as saídas
+
+
+3. Copiar os arquivos
 cd /workspaces/labsisop-buildroot
+
 for p in fifo rr idle low_idle misto; do
   e2cp output/images/rootfs.ext2:/root/trace_$p.dat trace_$p.dat
   e2cp output/images/rootfs.ext2:/root/saida_$p.txt saida_$p.txt
-  echo "== $p"; awk '/Apos pos/{f=1} f' saida_$p.txt
 done
 
-No misto, a thread A é LOW_IDLE e a B é IDLE. Os caracteres escritos por cada uma dão a proporção a comparar com 25/75.
 
-E. Prints do KernelShark (5, um por trace)
+
+5. KernelShark (5 prints)
 curl -fsSL https://gist.githubusercontent.com/miguelxvr/3c123ef67611652af9d2e45eccb8fc0a/raw/ | bash -s -- start
-DISPLAY=:99 kernelshark /workspaces/labsisop-DISPLAY=:99 kernelshark /workspaces/labsisop-buildroot/trace_rr.dat &buildroot/trace_fifo.dat &
 
-Tire o print e feche a janela antes de abrir o próximo. Repita trocando fifo por rr, idle, low_idle e misto. No RR, deixe o Marker A→B visível para medir a fatia.
 
-As colunas de escalonamentos, CPU % e tempo da Tabela 1 vêm de um script sobre trace-cmd report -i trace_X.dat. Só rode sudo apt-get install trace-cmd -y se o comando não existir.
+cd /workspaces/labsisop-buildroot
 
-F. Teste com 2 CPUs
-sed 's/-M pc/-M pc -smp cpus=2/' output/images/start-qemu.sh > output/images/start-qemu-smp.sh
-chmod +x output/images/start-qemu-smp.sh
-./output/images/start-qemu-smp.sh serial-only
+DISPLAY=:99 kernelshark "$PWD/trace_fifo.dat" &
 
-Dentro do QEMU:
-
-cd /root
-trace-cmd record -o trace_rr_2cpu.dat -e sched:sched_switch sh -c "./sched_profiler 5000000 4 SCHED_RR > saida_rr_2cpu.txt"
-trace-cmd record -o trace_fifo_2cpu.dat -e sched:sched_switch sh -c "./sched_profiler 5000000 4 SCHED_FIFO > saida_fifo_2cpu.txt"
-sync
-poweroff
-
-No Codespace:
-
-for p in rr fifo; do
-  e2cp output/images/rootfs.ext2:/root/trace_${p}_2cpu.dat trace_${p}_2cpu.dat
-  e2cp output/images/rootfs.ext2:/root/saida_${p}_2cpu.txt saida_${p}_2cpu.txt
-  awk '/Apos pos/{f=1} f' saida_${p}_2cpu.txt
-done
-G. Só se mantiver a Tabela 2 (opcional)
-
-Esta tabela só faz sentido se o valor de WMULT_LOW_IDLEPRIO do bloco A for o do tutorial (1431655765). Se já for 4294967295, pule este bloco e não escreva o achado do “erro do patch”.
-
-A coluna “Kernel do tutorial” usa o trace_misto.dat do bloco C mais este teste, no QEMU:
-
-trace-cmd record -o trace_indep.dat -e sched:sched_switch sh -c "./sched_profiler 5000000 1 SCHED_LOW_IDLE > saida_i1.txt & ./sched_profiler 5000000 1 SCHED_IDLE > saida_i2.txt; wait"
+curl -fsSL https://gist.githubusercontent.com/miguelxvr/3c123ef67611652af9d2e45eccb8fc0a/raw/ | bash -s -- stop
