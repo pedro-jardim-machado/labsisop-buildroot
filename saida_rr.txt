@@ -11,7 +11,7 @@ new: SCHED_RR prioridade=10
 --- Thread D ---
 new: SCHED_RR prioridade=10
 
-Parametros: tam_buffer=5000000 threads=4 politica=SCHED_RR
+Parametros: tam_buffer=50000000 threads=4 politica=SCHED_RR
 
 --- Buffer ---
 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
@@ -171,14 +171,14 @@ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 AAAAAAAAAAAAAAAA
-[... mostrando as primeiras 10000 de 5000000 posicoes ...]
+[... mostrando as primeiras 10000 de 50000000 posicoes ...]
 
---- Sequencia compactada ---
-ABCDABCDABCDABCD
+--- Sequencia compactada (repeticoes consecutivas agrupadas) ---
+ABCDABC
 
---- Resumo por thread ---
-A = 4, 1729259 caracteres
-B = 4, 448717 caracteres
-C = 4, 961346 caracteres
-D = 4, 1860678 caracteres
-Tempo total do processo: 2.216 segundos
+--- Resumo por thread: blocos e caracteres ---
+A = 2 blocos, 16475902 caracteres
+B = 2 blocos, 15095186 caracteres
+C = 2 blocos, 9483248 caracteres
+D = 1 blocos, 8945664 caracteres
+Tempo total do processo: 1.193 segundos

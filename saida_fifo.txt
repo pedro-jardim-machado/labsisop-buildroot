@@ -11,7 +11,7 @@ new: SCHED_FIFO prioridade=10
 --- Thread D ---
 new: SCHED_FIFO prioridade=10
 
-Parametros: tam_buffer=5000000 threads=4 politica=SCHED_FIFO
+Parametros: tam_buffer=50000000 threads=4 politica=SCHED_FIFO
 
 --- Buffer ---
 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
@@ -171,14 +171,14 @@ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 AAAAAAAAAAAAAAAA
-[... mostrando as primeiras 10000 de 5000000 posicoes ...]
+[... mostrando as primeiras 10000 de 50000000 posicoes ...]
 
---- Sequencia compactada ---
+--- Sequencia compactada (repeticoes consecutivas agrupadas) ---
 A
 
---- Resumo por thread ---
-A = 1, 5000000 caracteres
-B = 0, 0 caracteres
-C = 0, 0 caracteres
-D = 0, 0 caracteres
-Tempo total do processo: 1.138 segundos
+--- Resumo por thread: blocos e caracteres ---
+A = 1 blocos, 50000000 caracteres
+B = 0 blocos, 0 caracteres
+C = 0 blocos, 0 caracteres
+D = 0 blocos, 0 caracteres
+Tempo total do processo: 1.357 segundos

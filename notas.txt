@@ -7,21 +7,27 @@ e2cp -p sched_profiler output/images/rootfs.ext2:/root/sched_profiler
 
 
 2. Executar e gravar os traces
-./output/images/start-qemu.sh serial-only
+qemu-system-i386 \
+    -M pc \
+    -smp 2 \
+    -kernel output/images/bzImage \
+    -drive file=output/images/rootfs.ext2,if=virtio,format=raw \
+    -append "rootwait root=/dev/vda console=ttyS0" \
+    -nographic
 
 
 Dentro do QEMU:
 cd /root
 
-trace-cmd record -o trace_fifo.dat -e sched:sched_switch sh -c "./sched_profiler 5000000 4 SCHED_FIFO > saida_fifo.txt"
+trace-cmd record -o trace_fifo.dat -e sched:sched_switch sh -c "./sched_profiler 50000000 4 SCHED_FIFO > saida_fifo.txt"
 
-trace-cmd record -o trace_rr.dat -e sched:sched_switch sh -c "./sched_profiler 5000000 4 SCHED_RR > saida_rr.txt"
+trace-cmd record -o trace_rr.dat -e sched:sched_switch sh -c "./sched_profiler 50000000 4 SCHED_RR > saida_rr.txt"
 
-trace-cmd record -o trace_idle.dat -e sched:sched_switch sh -c "./sched_profiler 5000000 4 SCHED_IDLE > saida_idle.txt"
+trace-cmd record -o trace_idle.dat -e sched:sched_switch sh -c "./sched_profiler 50000000 4 SCHED_IDLE > saida_idle.txt"
 
-trace-cmd record -o trace_low_idle.dat -e sched:sched_switch sh -c "./sched_profiler 5000000 4 SCHED_LOW_IDLE > saida_low_idle.txt"
+trace-cmd record -o trace_low_idle.dat -e sched:sched_switch sh -c "./sched_profiler 50000000 4 SCHED_LOW_IDLE > saida_low_idle.txt"
 
-trace-cmd record -o trace_misto.dat -e sched:sched_switch sh -c "./sched_profiler 5000000 2 SCHED_LOW_IDLE,SCHED_IDLE > saida_misto.txt"
+trace-cmd record -o trace_misto.dat -e sched:sched_switch sh -c "./sched_profiler 50000000 2 SCHED_LOW_IDLE,SCHED_IDLE > saida_misto.txt"
 
 sync
 poweroff
@@ -36,6 +42,19 @@ for p in fifo rr idle low_idle misto; do
 done
 
 
+
+trace-cmd record -o trace_fifo2cpu.dat -e sched:sched_switch sh -c "./sched_profiler 5000000 4 SCHED_FIFO > saida_fifo2cpu.txt"
+trace-cmd record -o trace_rr2cpu.dat -e sched:sched_switch sh -c "./sched_profiler 5000000 4 SCHED_RR > saida_rr2cpu.txt"
+trace-cmd record -o trace_idle2cpu.dat -e sched:sched_switch sh -c "./sched_profiler 5000000 4 SCHED_IDLE > saida_idle2cpu.txt"
+trace-cmd record -o trace_low_idle2cpu.dat -e sched:sched_switch sh -c "./sched_profiler 5000000 4 SCHED_LOW_IDLE > saida_low_idle2cpu.txt"
+trace-cmd record -o trace_misto2cpu.dat -e sched:sched_switch sh -c "./sched_profiler 5000000 2 SCHED_LOW_IDLE,SCHED_IDLE > saida_misto2cpu.txt"
+sync
+poweroff
+
+for p in fifo rr idle low_idle misto; do
+  e2cp output/images/rootfs.ext2:/root/trace_${p}2cpu.dat trace_${p}2cpu.dat
+  e2cp output/images/rootfs.ext2:/root/saida_${p}2cpu.txt saida_${p}2cpu.txt
+done
 
 5. KernelShark (5 prints)
 curl -fsSL https://gist.githubusercontent.com/miguelxvr/3c123ef67611652af9d2e45eccb8fc0a/raw/ | bash -s -- start

@@ -7,6 +7,7 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <sched.h>
+#include <stdatomic.h>
 #include <time.h>
 
 #define SCHED_IDLE 5
@@ -19,9 +20,8 @@
 
 static char *buffer;
 static size_t buffer_size;
-static size_t next_index;     
-static sem_t mutex;          
-static sem_t ready;         
+static atomic_size_t next_index;   /* ponteiro global, reservado de forma atomica */
+static sem_t ready;
 
 struct thread_arg {
     char ch;
@@ -42,7 +42,7 @@ static const struct {
     { "SCHED_RR",       SCHED_RR }
 };
 
-#define NPOLICIES ((int)(sizeof(policies) / sizeof(policies[0]))) // length
+#define NPOLICIES ((int)(sizeof(policies) / sizeof(policies[0])))
 
 static int parse_policy(const char *s)
 {
@@ -66,7 +66,7 @@ static const char *policy_str(int policy)
     return "unknown";
 }
 
-// aplica a politica 
+/* aplica a politica */
 static int set_thread_policy(pthread_t thr, int policy)
 {
     struct sched_param param;
@@ -93,29 +93,28 @@ static int set_thread_policy(pthread_t thr, int policy)
 static void *worker(void *arg)
 {
     struct thread_arg *t = arg;
+    size_t idx;
 
     sem_post(&ready);
     sem_wait(&t->start);
 
     for (;;) {
-        sem_wait(&mutex);              /* secao critica */
+        /* reserva a proxima posicao: le o valor, soma 1 e devolve o antigo,
+         * tudo em uma operacao indivisivel; duas threads nunca recebem
+         * o mesmo indice e nenhuma thread bloqueia */
+        idx = atomic_fetch_add(&next_index, 1);
 
-        if (next_index >= buffer_size) {
-            sem_post(&mutex);
+        if (idx >= buffer_size)
             break;
-        }
 
-        buffer[next_index] = t->ch;    /* escreve na posicao corrente */
-        next_index++;                  
-
-        sem_post(&mutex);              /* sai da secao critica */
+        buffer[idx] = t->ch;           /* grava na posicao reservada */
     }
 
     return NULL;
 }
 
 static void print_wrapped(const char *s, size_t n)
-{   
+{
     size_t i;
 
     for (i = 0; i < n; i++) {
@@ -134,8 +133,9 @@ static void usage(const char *prog)
     fprintf(stderr,
         "Uso: %s <tam_buffer> <num_threads> <politica>\n"
         "  politica: SCHED_LOW_IDLE | SCHED_IDLE | SCHED_FIFO | SCHED_RR\n"
+        "  (lista separada por virgula para uma politica por thread)\n"
         "Exemplo: %s 5000000 4 SCHED_RR\n",
-        prog, prog, prog);
+        prog, prog);
 }
 
 int main(int argc, char **argv)
@@ -154,6 +154,7 @@ int main(int argc, char **argv)
     long counts[MAX_THREADS] = { 0 };
     long blocks[MAX_THREADS] = { 0 };
     long col = 0;
+    long total_blocks = 0;
     char last = 0;
 
     if (clock_gettime(CLOCK_MONOTONIC, &start_time) != 0) {
@@ -208,10 +209,10 @@ int main(int argc, char **argv)
     }
 
     buffer_size = (size_t)size;
+    atomic_init(&next_index, 0);
     sem_init(&ready, 0, 0);
-    sem_init(&mutex, 0, 1);            /* semaforo binario */
 
-    /* cria as thread, todas ficam bloqueadas */
+    /* cria as threads, todas ficam bloqueadas */
     for (i = 0; i < nthreads; i++) {
         targs[i].ch = 'A' + (char)i;
         targs[i].policy = list[i % nlist];
@@ -243,7 +244,7 @@ int main(int argc, char **argv)
                 fprintf(stderr, "Permissao insuficiente: execute como root.\n");
             fprintf(stderr, "Execucao invalida: thread %c sem a politica pedida.\n",
                     targs[i].ch);
-            return 1;   /* as threads bloqueadas  */
+            return 1;   /* as threads ficam bloqueadas */
         }
     }
 
@@ -267,7 +268,7 @@ int main(int argc, char **argv)
                MAX_PRINT, size);
     }
 
-    printf("\n--- Sequencia compactada ---\n");
+    printf("\n--- Sequencia compactada (repeticoes consecutivas agrupadas) ---\n");
 
     for (i = 0; i < size; i++) {
         char c = buffer[i];
@@ -275,9 +276,14 @@ int main(int argc, char **argv)
         counts[c - 'A']++;
 
         if (c != last) {
-            putchar(c);
-            if (++col % LINE_WIDTH == 0)
-                putchar('\n');
+            /* imprime so os primeiros MAX_PRINT blocos: com varias CPUs a
+             * sequencia pode ter milhoes de blocos e travar o console */
+            if (total_blocks < MAX_PRINT) {
+                putchar(c);
+                if (++col % LINE_WIDTH == 0)
+                    putchar('\n');
+            }
+            total_blocks++;
             blocks[c - 'A']++;
             last = c;
         }
@@ -286,9 +292,13 @@ int main(int argc, char **argv)
     if (col % LINE_WIDTH != 0)
         putchar('\n');
 
-    printf("\n--- Resumo por thread ---\n");
+    if (total_blocks > MAX_PRINT)
+        printf("[... mostrando os primeiros %d de %ld blocos ...]\n",
+               MAX_PRINT, total_blocks);
+
+    printf("\n--- Resumo por thread: blocos e caracteres ---\n");
     for (i = 0; i < nthreads; i++)
-        printf("%c = %ld, %ld caracteres\n",
+        printf("%c = %ld blocos, %ld caracteres\n",
                targs[i].ch, blocks[i], counts[i]);
 
     if (clock_gettime(CLOCK_MONOTONIC, &end_time) != 0) {
